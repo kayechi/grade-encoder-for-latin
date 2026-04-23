@@ -186,13 +186,16 @@ function App() {
           return clean.toUpperCase();
       };
 
-      for (let pdfData of parsedPdfs) {
-        // Formulate tabName with surname first strategy
-        let baseName = pdfData.extractedName || pdfData.file.name;
-        let tabName = formatName(baseName);
-        
-        // Limit Excel tab name to 31 chars
-        if (tabName.length > 31) tabName = tabName.substring(0, 31);
+      // Pre-compute tab names and sort alphabetically by surname
+      const sortedPdfs = parsedPdfs.map(pdfData => {
+         let baseName = pdfData.extractedName || pdfData.file.name;
+         let tabName = formatName(baseName);
+         if (tabName.length > 31) tabName = tabName.substring(0, 31);
+         return { ...pdfData, tabName };
+      }).sort((a, b) => a.tabName.localeCompare(b.tabName));
+
+      for (let pdfData of sortedPdfs) {
+        const tabName = pdfData.tabName;
         
         addLog(`Duplicating template for student: ${tabName}`);
         
@@ -305,7 +308,23 @@ function App() {
         </div>
 
         <div className="card">
-          <h2><FileText className="icon" /> 2. Upload PDFs</h2>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
+            <h2><FileText className="icon" /> 2. Upload PDFs</h2>
+            {pdfFiles.length > 0 && (
+              <button 
+                className="btn-clear"
+                onClick={(e) => { 
+                  e.stopPropagation(); 
+                  setPdfFiles([]); 
+                  if(pdfsInputRef.current) pdfsInputRef.current.value = ""; 
+                  addLog("Cleared all uploaded PDFs."); 
+                }} 
+                style={{ background: "transparent", color: "var(--text-muted)", border: "1px solid var(--border)", padding: "0.25rem 0.5rem", borderRadius: "6px", fontSize: "0.8rem", cursor: "pointer" }}
+              >
+                Clear All
+              </button>
+            )}
+          </div>
           <div 
             className="dropzone" 
             onClick={() => pdfsInputRef.current?.click()}
