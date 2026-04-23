@@ -33,6 +33,7 @@ function App() {
   const [progress, setProgress] = useState(0);
   const [logs, setLogs] = useState<string[]>([]);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [hasDownloaded, setHasDownloaded] = useState(false);
 
   const templateInputRef = useRef<HTMLInputElement>(null);
   const pdfsInputRef = useRef<HTMLInputElement>(null);
@@ -117,6 +118,7 @@ function App() {
     setProgress(0);
     setLogs([]);
     setDownloadUrl(null);
+    setHasDownloaded(false);
 
     try {
       addLog("Starting extraction of PDFs...");
@@ -382,15 +384,23 @@ function App() {
           )}
 
           {downloadUrl && (
-            <a 
-              href={downloadUrl} 
-              download="Encoded_Grades_Output.xlsx" 
-              style={{ textDecoration: 'none' }}
-            >
-              <button className="btn" style={{ marginTop: "1rem", backgroundColor: "var(--secondary)" }}>
-                <Download size={20} /> Download Encoded Excel
-              </button>
-            </a>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <a 
+                href={downloadUrl} 
+                download="Encoded_Grades_Output.xlsx" 
+                style={{ textDecoration: 'none', width: '100%' }}
+                onClick={() => setHasDownloaded(true)}
+              >
+                <button className="btn" style={{ marginTop: "1rem", backgroundColor: "var(--secondary)" }}>
+                  <Download size={20} /> Download Encoded Excel
+                </button>
+              </a>
+              {hasDownloaded && (
+                <div style={{ marginTop: "1rem", color: "var(--secondary)", fontSize: "0.95rem", display: "flex", alignItems: "center", gap: "0.5rem", fontWeight: 500 }}>
+                  <CheckCircle size={18} /> File downloaded successfully!
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
