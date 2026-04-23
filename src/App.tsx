@@ -154,6 +154,7 @@ function App() {
 
       // Detect the dynamic 'Final Grade' column
       let gradeColIndex = -1;
+      let nameCellRow = -1;
       
       templateSheet.eachRow((row, rowNumber) => {
           row.eachCell((cell, colNumber) => {
@@ -161,6 +162,9 @@ function App() {
                   const val = cell.value?.toString().toLowerCase().trim().replace(/\s+/g, " ");
                   if (val === "final grade" || val === "grade") {
                       gradeColIndex = colNumber;
+                  }
+                  if (colNumber === 1 && val === "name") {
+                      nameCellRow = rowNumber;
                   }
               }
           });
@@ -203,8 +207,12 @@ function App() {
         
         const newSheet = copyWorksheet(workbook, templateSheet, tabName);
 
-        // Put the formatted name into the Name field of the template explicitly replacing B8
-        newSheet.getCell('B8').value = tabName;
+        // Dynamically put the formatted name into Column B at the detected Name row (fallback to B8)
+        if (nameCellRow !== -1) {
+            newSheet.getCell(`B${nameCellRow}`).value = tabName;
+        } else {
+            newSheet.getCell('B8').value = tabName;
+        }
 
         const fuse = new Fuse(pdfData.lines, {
             includeScore: true,
