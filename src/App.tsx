@@ -172,19 +172,34 @@ function App() {
 
       const progressPerSheet = 40 / Math.max(1, parsedPdfs.length);
 
+      const formatName = (rawName: string) => {
+          let clean = rawName.replace(/\.pdf$/i, "");
+          clean = clean.replace(/_/g, " ");
+          clean = clean.replace(/\.([a-zA-Z])/g, ". $1"); // Fix 'S.PESIGAN' to 'S. PESIGAN'
+          clean = clean.replace(/\s+/g, " ").trim();
+          
+          const parts = clean.split(" ");
+          if (parts.length > 1) {
+              const surname = parts.pop();
+              return `${surname}, ${parts.join(" ")}`.toUpperCase();
+          }
+          return clean.toUpperCase();
+      };
+
       for (let pdfData of parsedPdfs) {
-        // Attempt to establish a clean tab name, limit Excel tab name to 31 chars
-        let tabName = pdfData.extractedName || pdfData.file.name.replace(/\.pdf$/i, "");
+        // Formulate tabName with surname first strategy
+        let baseName = pdfData.extractedName || pdfData.file.name;
+        let tabName = formatName(baseName);
+        
+        // Limit Excel tab name to 31 chars
         if (tabName.length > 31) tabName = tabName.substring(0, 31);
         
         addLog(`Duplicating template for student: ${tabName}`);
         
         const newSheet = copyWorksheet(workbook, templateSheet, tabName);
 
-        // Put the extracted name into the Name field of the template explicitly replacing B8
-        if (pdfData.extractedName) {
-            newSheet.getCell('B8').value = pdfData.extractedName.toUpperCase();
-        }
+        // Put the formatted name into the Name field of the template explicitly replacing B8
+        newSheet.getCell('B8').value = tabName;
 
         const fuse = new Fuse(pdfData.lines, {
             includeScore: true,
