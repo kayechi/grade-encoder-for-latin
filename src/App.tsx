@@ -55,18 +55,6 @@ function App() {
     }
   };
 
-  const copyWorksheet = (workbook: ExcelJS.Workbook, originalSheet: ExcelJS.Worksheet, newSheetName: string) => {
-    // Using deep clone of the model guarantees all formulas, styles, and merges are copied perfectly
-    // without dropping calculation references or complex cells.
-    const sheetModel = JSON.parse(JSON.stringify((originalSheet as any).model));
-    sheetModel.name = newSheetName;
-    
-    const newSheet = workbook.addWorksheet(newSheetName);
-    (newSheet as any).model = sheetModel;
-    
-    return newSheet;
-  };
-
   const extractLinesFromPdf = async (file: File): Promise<{ lines: string[], extractedName: string | null }> => {
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
@@ -145,14 +133,20 @@ function App() {
         throw new Error("Invalid Excel format. Please ensure your template is an '.xlsx' file and not an older '.xls' file.");
       }
       const templateBuffer = await templateFile.arrayBuffer();
+
+      // Load the workbook once — all operations happen within this single workbook
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.load(templateBuffer);
-      setProgress(50);
-
       const templateSheet = workbook.worksheets[0];
       if (!templateSheet) throw new Error("Template workbook has no sheets!");
 
-      // Detect the dynamic 'Final Grade' column
+      // Rename the template sheet to a safe internal name so it never collides with student names
+      const originalTemplateName = templateSheet.name;
+      templateSheet.name = `__TEMPLATE_${Date.now()}__`;
+
+      // Snapshot the template model for cloning (before any modifications)
+      const templateModel = JSON.parse(JSON.stringify((templateSheet as any).model));
+
       let gradeColIndex = -1;
       let nameCellRow = -1;
       
@@ -171,10 +165,15 @@ function App() {
       });
 
       if (gradeColIndex === -1) {
-          addLog("⚠️ 'Final Grade' header not found strictly. Falling back to adjacent mapping, which may overwrite other fields.");
+          addLog("⚠️ 'Final Grade' header not found strictly. Falling back to adjacent mapping.");
       } else {
           addLog(`Detected 'Final Grade' at column ${gradeColIndex}`);
       }
+
+      // Determine how many header rows to protect (everything up to and including the Name row + a small buffer)
+      const headerSkipRows = nameCellRow !== -1 ? nameCellRow + 2 : 10;
+
+      setProgress(50);
 
       const progressPerSheet = 40 / Math.max(1, parsedPdfs.length);
 
@@ -203,16 +202,19 @@ function App() {
       for (let pdfData of sortedPdfs) {
         const tabName = pdfData.tabName;
         
-        addLog(`Duplicating template for student: ${tabName}`);
+        addLog(`Creating sheet for student: ${tabName}`);
         
-        const newSheet = copyWorksheet(workbook, templateSheet, tabName);
+        // Create a new sheet and clone the template model into it, preserving the new sheet's internal ID
+        const newSheet = workbook.addWorksheet(tabName);
+        const newSheetId = (newSheet as any).id;
+        const clonedModel = JSON.parse(JSON.stringify(templateModel));
+        clonedModel.name = tabName;
+        clonedModel.id = newSheetId;
+        (newSheet as any).model = clonedModel;
 
-        // Dynamically put the formatted name into Column B at the detected Name row (fallback to B8)
-        if (nameCellRow !== -1) {
-            newSheet.getCell(`B${nameCellRow}`).value = tabName;
-        } else {
-            newSheet.getCell('B8').value = tabName;
-        }
+        // Write name into Column B at the detected Name row (fallback to B8)
+        const nameRow = nameCellRow !== -1 ? nameCellRow : 8;
+        newSheet.getCell(`B${nameRow}`).value = tabName;
 
         const fuse = new Fuse(pdfData.lines, {
             includeScore: true,
@@ -223,8 +225,8 @@ function App() {
         let encodingsInTab = 0;
 
         newSheet.eachRow((row, _rowNumber) => {
-            // Prevent automated scanning from breaking any headers by skipping rows 1-10
-            if (_rowNumber <= 10) return;
+            // Dynamically skip all header rows based on where "Name" was found
+            if (_rowNumber <= headerSkipRows) return;
 
             row.eachCell((cell, colNumber) => {
                 // Ensure we only look at course codes which are on the left side (cols 1 to 5)
@@ -270,7 +272,7 @@ function App() {
         setProgress(Math.round(currentProgress));
       }
 
-      // Cleanup: remove the original empty template tab so it's not downloaded
+      // Remove the original template sheet so only student tabs remain
       workbook.removeWorksheet(templateSheet.id);
 
       addLog("Generating output file...");
